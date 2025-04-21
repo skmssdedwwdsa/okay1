@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ride the Bus</title>
+  <style>
+    body {
+      background-color: #1e1e2f;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #f7b731;
+    }
+
+    .cash-display, .bet-value {
+      font-size: 1.5em;
+      margin: 10px;
+    }
+
+    .bet-section, .game-section {
+      background: #2e2e42;
+      padding: 20px;
+      border-radius: 10px;
+      display: inline-block;
+      margin-top: 20px;
+    }
+
+    .slider {
+      width: 100%;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background-color: #45aaf2;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #2d98da;
+    }
+
+    .card-text {
+      font-size: 1.3em;
+      margin-top: 15px;
+    }
+
+    #cheatPanel {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #111;
+      color: #0f0;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #0f0;
+      z-index: 999;
+    }
+
+    #cheatButton {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: transparent;
+      color: transparent;
+      border: none;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎲 Ride the Bus</h1>
+
+  <div class="cash-display">💰 Cash: $<span id="cash">3000</span></div>
+
+  <div class="bet-section">
+    <label for="betSlider">Place Your Bet: </label><br>
+    <input type="range" id="betSlider" class="slider" min="1" max="500" value="50">
+    <div class="bet-value">Bet: $<span id="betAmount">50</span></div>
+    <button onclick="startGame()">Start Game</button>
+  </div>
+
+  <div class="game-section" id="gameArea" style="display:none;">
+    <div id="question" style="font-size: 1.2em; margin-bottom: 10px;"></div>
+    <div id="choices"></div>
+    <div id="cardText" class="card-text"></div>
+  </div>
+
+  <div id="cheatPanel">
+    <strong>🃏 Next Card:</strong> <span id="nextCard"></span>
+  </div>
+  <button id="cheatButton" onclick="toggleCheat()"></button>
+
+  <script>
+    let cash = 3000;
+    let bet = 50;
+    let multiplier = 1;
+    let stage = 0;
+    let deck = [];
+    let drawnCards = [];
+
+    const betSlider = document.getElementById("betSlider");
+    const betAmountDisplay = document.getElementById("betAmount");
+    const cashDisplay = document.getElementById("cash");
+    const gameArea = document.getElementById("gameArea");
+    const question = document.getElementById("question");
+    const choices = document.getElementById("choices");
+    const cardText = document.getElementById("cardText");
+    const nextCardDisplay = document.getElementById("nextCard");
+    const cheatPanel = document.getElementById("cheatPanel");
+
+    const suits = ["♣", "♦", "♥", "♠"];
+    const values = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+    const valueNames = { 11: "J", 12: "Q", 13: "K", 14: "A" };
+
+    betSlider.addEventListener("input", () => {
+      bet = parseInt(betSlider.value);
+      betAmountDisplay.textContent = bet;
+    });
+
+    function updateCash() {
+      cashDisplay.textContent = cash;
+    }
+
+    function buildDeck() {
+      let d = [];
+      for (let suit of suits) {
+        for (let value of values) {
+          d.push({ suit, value });
+        }
+      }
+      return d.sort(() => Math.random() - 0.5);
+    }
+
+    function drawCard() {
+      return deck.pop();
+    }
+
+    function formatCard(card) {
+      const val = valueNames[card.value] || card.value;
+      return `${val} ${card.suit}`;
+    }
+
+    function showCard(card) {
+      cardText.innerHTML += `<div>${formatCard(card)}</div>`;
+    }
+
+    function startGame() {
+      if (bet > cash) {
+        alert("You don't have enough cash!");
+        return;
+      }
+
+      cash -= bet;
+      updateCash();
+
+      deck = buildDeck();
+      drawnCards = [];
+      multiplier = 1;
+      stage = 0;
+      cardText.innerHTML = '';
+      gameArea.style.display = 'block';
+      updateCheat();
+      nextStage();
+    }
+
+    function nextStage() {
+      choices.innerHTML = '';
+
+      if (stage === 0) {
+        question.textContent = "Red or Black?";
+        addChoice("Red", () => handleColorGuess("red"));
+        addChoice("Black", () => handleColorGuess("black"));
+      } else if (stage === 1) {
+        question.textContent = "Higher or Lower?";
+        addChoice("Higher", () => handleHighLow("higher"));
+        addChoice("Lower", () => handleHighLow("lower"));
+        addChoice("💸 Cash Out", cashOut);
+      } else if (stage === 2) {
+        question.textContent = "Inside or Outside?";
+        addChoice("Inside", () => handleInsideOutside("inside"));
+        addChoice("Outside", () => handleInsideOutside("outside"));
+        addChoice("💸 Cash Out", cashOut);
+      } else if (stage === 3) {
+        question.textContent = "Guess the Suit!";
+        for (let s of suits) {
+          addChoice(s, () => handleSuitGuess(s));
+        }
+        addChoice("💸 Cash Out", cashOut);
+      }
+    }
+
+    function addChoice(text, handler) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      btn.onclick = handler;
+      choices.appendChild(btn);
+    }
+
+    function handleColorGuess(choice) {
+      const card = drawCard();
+      drawnCards.push(card);
+      showCard(card);
+      updateCheat();
+
+      const isRed = card.suit === "♥" || card.suit === "♦";
+      const correct = (choice === "red" && isRed) || (choice === "black" && !isRed);
+
+      if (correct) {
+        multiplier = 1;
+        stage++;
+        nextStage();
+      } else {
+        loseRound();
+      }
+    }
+
+    function handleHighLow(choice) {
+      const card = drawCard();
+      drawnCards.push(card);
+      showCard(card);
+      updateCheat();
+
+      const prev = drawnCards[0].value;
+      const curr = card.value;
+      const correct = (choice === "higher" && curr > prev) ||
+                      (choice === "lower" && curr < prev);
+
+      if (correct) {
+        multiplier = 2;
+        stage++;
+        nextStage();
+      } else {
+        loseRound();
+      }
+    }
+
+    function handleInsideOutside(choice) {
+      const card = drawCard();
+      drawnCards.push(card);
+      showCard(card);
+      updateCheat();
+
+      const [a, b] = [drawnCards[0].value, drawnCards[1].value];
+      const min = Math.min(a, b);
+      const max = Math.max(a, b);
+      const val = card.value;
+
+      const correct = (choice === "inside" && val > min && val < max) ||
+                      (choice === "outside" && (val < min || val > max));
+
+      if (correct) {
+        multiplier = 4;
+        stage++;
+        nextStage();
+      } else {
+        loseRound();
+      }
+    }
+
+    function handleSuitGuess(suit) {
+      const card = drawCard();
+      drawnCards.push(card);
+      showCard(card);
+      updateCheat();
+
+      if (card.suit === suit) {
+        multiplier = 20;
+        winRound();
+      } else {
+        loseRound();
+      }
+    }
+
+    function cashOut() {
+      const winnings = bet * multiplier;
+      cash += winnings;
+      alert(`You cashed out with $${winnings}`);
+      updateCash();
+      gameArea.style.display = 'none';
+    }
+
+    function winRound() {
+      const winnings = bet * multiplier;
+      cash += winnings;
+      alert(`You win! You earned $${winnings}`);
+      updateCash();
+      gameArea.style.display = 'none';
+    }
+
+    function loseRound() {
+      alert("You lost the round!");
+      gameArea.style.display = 'none';
+    }
+
+    function updateCheat() {
+      if (deck.length > 0) {
+        const next = deck[deck.length - 1];
+        nextCardDisplay.textContent = formatCard(next);
+      } else {
+        nextCardDisplay.textContent = "N/A";
+      }
+    }
+
+    function toggleCheat() {
+      cheatPanel.style.display = cheatPanel.style.display === "none" ? "block" : "none";
+    }
+  </script>
+</body>
+</html>
